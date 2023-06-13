@@ -25,6 +25,40 @@ library(quanteda)
 library(topicmodels)
 ```
 
+# **Literature review graph**
+
+```{r}
+infoadex_data <- read.csv("../datasets/infoadex_data.csv", sep = ";")
+
+infoadex_data  <- infoadex_data %>% mutate(LIDL = round(mean(LIDL), 2),#get means
+                                 Carrefour = round(mean(Carrefour), 2),
+                                 DÍA = round(mean(DÍA), 2),
+                                 ALDI = round(mean(ALDI),2),
+                                 Eroski = round(mean(Eroski), 2),
+                                 Ahorramás = round(mean(Ahorramás), 2),
+                                 Alcampo = round(mean(Alcampo),2),
+                                 Mercadona = round(mean(Mercadona),2)) %>%
+  slice(1:(n() - 2)) %>%#drop columns with repeated values
+  pivot_longer(cols = c(LIDL, Carrefour, DÍA, ALDI, Eroski, Ahorramás, Alcampo, Mercadona),#pivot to plot it
+               names_to = "Supermarket",
+               values_to = "Mean")
+
+graph1<-  ggplot(infoadex_data, aes(x = reorder(Supermarket, Mean), y = Mean)) +
+  geom_bar(stat = "identity", fill="#609E42") +
+  geom_text(aes(label = paste0("\u20AC", Mean)), vjust = -0.5) +
+  labs(title = "Mean of millions invested in advertising during 2016, 2017 and 2018 \n according to Infoadex",
+       x = NULL,
+       y = "Average millions spent") +
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5))
+
+graph1
+
+```
+```{r}
+ggsave("../plots/graph1.png", plot = graph1, width = 8, height = 8, dpi = 300)
+```
+
 # **Data gathering and processing**
 
 # Data gathering
@@ -480,25 +514,25 @@ Wordcloud
 
 ```{r}
 set.seed(234)
-graph1 <- lemmatized_mercadona %>%
+graph2 <- lemmatized_mercadona %>%
   count(lemmatized_word, sort = TRUE) %>%
   head(10) %>% # 10 most repeated words
   with(wordcloud(lemmatized_word, n, scale=c(2, 3), colors = "#609E42"))
 
-graph1
+graph2
 ```
 ```{r}
-# ggsave("../plots/graph1.png", plot= graph1)
+# png("../plots/graph2.png", plot= graph2)
 # dev.copy(png, "../plots/graph1.png")
 # dev.off()
 
-# ggsave("../plots/graph1.png", plot = wordcountswordcloud, width = 8, height = 8, dpi = 300)
+# ggsave("../plots/graph2.png", plot = graph2, width = 8, height = 8, dpi = 300)
 ```
 
 Barplot
 
 ```{r}
-graph2 <- lemmatized_mercadona%>%
+graph3 <- lemmatized_mercadona%>%
   count(lemmatized_word, sort = TRUE) %>%
   head(10) %>%  # 10 most repeated words
   mutate(lemmatized_word = reorder(lemmatized_word, n)) %>%# Order words by number of mentions
@@ -513,10 +547,10 @@ graph2 <- lemmatized_mercadona%>%
   theme(panel.grid.major.y = element_blank())+
   theme(plot.title = element_text(hjust = 0.4))
 
-graph2
+graph3
 ```
 ```{r}
-ggsave("../plots/graph2.png", plot = graph2, width = 8, height = 8, dpi = 300)
+ggsave("../plots/graph3.png", plot = graph3, width = 8, height = 8, dpi = 300)
 ```
 
 ### Use of specific words across 10 years
@@ -529,7 +563,7 @@ lemmatized_mercadona  %>%
   count()%>%
   rename(coinnovación = n)
 
-graph3 <- lemmatized_mercadona  %>%
+graph4 <- lemmatized_mercadona  %>%
   filter(lemmatized_word == "eljefe")%>%
   group_by(year) %>% summarise(n=n())%>%
   mutate(year = as.factor(year)) %>%
@@ -539,11 +573,11 @@ graph3 <- lemmatized_mercadona  %>%
   labs(y = NULL, x =NULL)+
   theme_classic()
 
-graph3 
+graph4 
 
 ```
 ```{r}
-ggsave("../plots/graph3.png", plot = graph3, width = 8, height = 8, dpi = 300)
+ggsave("../plots/graph4.png", plot = graph4, width = 8, height = 8, dpi = 300)
 ```
 
 Coinnovación
@@ -554,7 +588,7 @@ lemmatized_mercadona  %>%
   count()%>%
   rename(coinnovación = n)
 
-graph4 <- lemmatized_mercadona %>%
+graph5 <- lemmatized_mercadona %>%
   filter(lemmatized_word == "coinnovación")%>%
   group_by(year) %>% summarise(n=n())%>%
   mutate(year = as.factor(year)) %>%
@@ -564,10 +598,10 @@ graph4 <- lemmatized_mercadona %>%
   labs(y = NULL, x=NULL)+
   theme_classic()
 
-graph4
+graph5
 ```
 ```{r}
-ggsave("../plots/graph4.png", plot = graph4, width = 8, height = 8, dpi = 300)
+ggsave("../plots/graph5.png", plot = graph5, width = 8, height = 8, dpi = 300)
 ```
 
 Juan Roig
@@ -578,7 +612,7 @@ lemmatized_mercadona  %>%
   count()%>%
   rename(JuanRoig = n)
 
-graph5 <- lemmatized_mercadona %>%
+graph6 <- lemmatized_mercadona %>%
   filter(lemmatized_word == "juan" | lemmatized_word == "roig")%>%
   group_by(year) %>% summarise(n=n())%>%
   mutate(year = as.factor(year)) %>%
@@ -588,10 +622,10 @@ graph5 <- lemmatized_mercadona %>%
   labs(y = NULL, x=NULL)+
   theme_classic()
 
-graph5
+graph6
 ```
 ```{r}
-ggsave("../plots/graph5.png", plot = graph5, width = 8, height = 8, dpi = 300)
+ggsave("../plots/graph6.png", plot = graph6, width = 8, height = 8, dpi = 300)
 ```
 
 Plástico
@@ -602,7 +636,7 @@ lemmatized_mercadona  %>%
   count()%>%
   rename(plástico = n)
 
-graph6 <- lemmatized_mercadona %>%
+graph7 <- lemmatized_mercadona %>%
   filter(lemmatized_word == "plástico")%>%
   group_by(year) %>% summarise(n=n())%>%
   mutate(year = as.factor(year)) %>%
@@ -612,10 +646,10 @@ graph6 <- lemmatized_mercadona %>%
   labs(y = NULL, x=NULL)+
   theme_classic()
 
-graph6
+graph7
 ```
 ```{r}
-ggsave("../plots/graph6.png", plot = graph6, width = 8, height = 8, dpi = 300)
+ggsave("../plots/graph7.png", plot = graph7, width = 8, height = 8, dpi = 300)
 ```
 
 COVID
@@ -631,7 +665,7 @@ lemmatized_mercadona  %>%
   count()%>%
   rename(medida = n)
 
-graph7 <- lemmatized_mercadona %>%
+graph8 <- lemmatized_mercadona %>%
   filter(lemmatized_word == "covid")%>%
   group_by(year) %>% summarise(n=n())%>%
   mutate(year = as.factor(year)) %>%
@@ -641,9 +675,9 @@ graph7 <- lemmatized_mercadona %>%
   labs(y = NULL, x=NULL)+
   theme_classic()
 
-graph7
+graph8
 
-graph8 <- lemmatized_mercadona %>%
+graph9 <- lemmatized_mercadona %>%
   filter(lemmatized_word == "medida")%>%
   group_by(year) %>% summarise(n=n())%>%
   mutate(year = as.factor(year)) %>%
@@ -653,11 +687,11 @@ graph8 <- lemmatized_mercadona %>%
   labs(y = NULL, x=NULL)+
   theme_classic()
 
-graph8
+graph9
 ```
 ```{r}
-ggsave("../plots/graph7.png", plot = graph7, width = 8, height = 8, dpi = 300)
 ggsave("../plots/graph8.png", plot = graph8, width = 8, height = 8, dpi = 300)
+ggsave("../plots/graph9.png", plot = graph9, width = 8, height = 8, dpi = 300)
 ```
 
 ## Term frequency
@@ -679,7 +713,7 @@ Visualizing it
 
 ```{r}
 #ordered by years
-graph9a <- total_words_by_year %>%
+graph10a <- total_words_by_year %>%
   ggplot(aes(x = as.factor(year))) +
   geom_col(aes(y = total), width = 0.5, fill= "#609E42") +
   labs(x = "", y = "Number of words", color = "")  +
@@ -693,10 +727,10 @@ graph9a <- total_words_by_year %>%
   theme(panel.grid.major.y = element_blank())+
   theme(plot.title = element_text(hjust = 0.4))
 
-graph9a
+graph10a
 
 #ordered by number of total words
-graph9b <- total_words_by_year %>%
+graph10b <- total_words_by_year %>%
   arrange(desc(total)) %>% # sort rows by total number of words in descending order
   mutate(year = fct_reorder(as.factor(year), total, .desc = TRUE)) %>%
   ggplot(aes(x = year)) +
@@ -712,11 +746,11 @@ graph9b <- total_words_by_year %>%
   theme(panel.grid.major.y = element_blank())+
   theme(plot.title = element_text(hjust = 0.4))
 
-graph9b
+graph10b
 ```
 ```{r}
-ggsave("../plots/graph9a.png", plot = graph9a, width = 8, height = 8, dpi = 300)
-ggsave("../plots/graph9b.png", plot = graph9b, width = 8, height = 8, dpi = 300)
+ggsave("../plots/graph10a.png", plot = graph10a, width = 8, height = 8, dpi = 300)
+ggsave("../plots/graph10b.png", plot = graph10b, width = 8, height = 8, dpi = 300)
 ```
 
 2. How many times each word appears in each year
@@ -767,7 +801,7 @@ term_frequency_df
 
 
 ```{r}
-graph10 <- term_frequency_df %>%
+graph11 <- term_frequency_df %>%
   mutate(lemmatized_word = reorder(lemmatized_word, term_frequency)) %>%# Order words by number of mentions
   head(14) %>% #To show the 10 words with higher frequency
   ggplot(aes(term_frequency, lemmatized_word)) +
@@ -781,10 +815,10 @@ graph10 <- term_frequency_df %>%
   theme(panel.grid.major.y = element_blank())+
   theme(plot.title = element_text(hjust = 0.4))
 
-graph10
+graph11
 ```
 ```{r}
-ggsave("../plots/graph10.png", plot = graph10, width = 8, height = 8, dpi = 300)
+ggsave("../plots/graph11.png", plot = graph11, width = 8, height = 8, dpi = 300)
 ```
 
 ## Distinctive words: Get TF-IDF
@@ -803,7 +837,7 @@ These first words in the data frame have zero TF-IDF, because these are words th
 # Visualize distinctiveness across years
 
 ```{r}
-graph11a <- tf_idf_df %>%
+graph12a <- tf_idf_df %>%
   select(year, lemmatized_word, tf_idf) %>%
   mutate(tf_idf = as.numeric(tf_idf)) %>%
   mutate(lemmatized_word = reorder(lemmatized_word, tf_idf))%>%
@@ -817,10 +851,10 @@ graph11a <- tf_idf_df %>%
     theme_minimal()+
   theme(axis.text.x= element_blank())#To not show x axis
 
-graph11a
+graph12a
 ```
 ```{r}
-ggsave("../plots/graph11a.png", plot = graph11a, width = 8, height = 8, dpi = 300)
+ggsave("../plots/graph12a.png", plot = graph12a, width = 8, height = 8, dpi = 300)
 ```
 
 # Filtering unconvenient words
@@ -847,7 +881,7 @@ tf_idf_df <- tf_idf_df %>%
 # Visualizing distictiveness without unconvinient words
 
 ```{r}
-graph11b <- tf_idf_df %>%
+graph12b <- tf_idf_df %>%
   select(year, word, tf_idf) %>%
   mutate(tf_idf = as.numeric(tf_idf)) %>%
   mutate(word = reorder(word, tf_idf))%>%
@@ -862,10 +896,10 @@ graph11b <- tf_idf_df %>%
         axis.ticks.x = element_blank(),
         plot.title = element_text(hjust = 0.4))
 
-graph11b
+graph12b
 ```
 ```{r}
-ggsave("../plots/graph11b.png", plot = graph11b, width = 8, height = 8, dpi = 300)
+ggsave("../plots/graph12b.png", plot = graph12b, width = 8, height = 8, dpi = 300)
 ```
 
 ## Bigrams: most common ones
@@ -931,20 +965,20 @@ Wordcloud
 
 ```{r}
 set.seed(234)
-graph12 <- bigram_counts %>%
+graph13 <- bigram_counts %>%
   slice_head(n= 10)%>% 
   with(wordcloud(bigram, n, scale=c(3, 1), colors = "#609E42"))
 
-graph12
+graph13
 ```
 ```{r}
-# ggsave("../plots/graph12.png", plot = graph12, width = 8, height = 8, dpi = 300)
+# ggsave("../plots/graph13.png", plot = graph13, width = 8, height = 8, dpi = 300)
 ```
 
 Barplot
 
 ```{r}
-graph14 <- bigram_counts %>%
+graph15 <- bigram_counts %>%
   mutate(bigram = fct_reorder(bigram, n, .desc = FALSE)) %>%# To order them from higher to lower
   mutate(word = reorder(bigram, -n)) %>%
  slice_head(n= 10)%>% # Select the top 10 bigrams 
@@ -959,10 +993,10 @@ graph14 <- bigram_counts %>%
   theme(panel.grid.major.y = element_blank())+
   theme(plot.title = element_text(hjust = 0.4))
 
-graph14
+graph15
 ```
 ```{r}
-ggsave("../plots/graph14.png", plot = graph14, width = 8, height = 8, dpi = 300)
+ggsave("../plots/graph15.png", plot = graph15, width = 8, height = 8, dpi = 300)
 ```
 
 ## Trigrams: most common words
@@ -1029,20 +1063,20 @@ Wordcloud
 
 ```{r}
 set.seed(234)
-graph13 <- trigram_counts %>%
+graph14 <- trigram_counts %>%
   slice_head(n = 10) %>%
   with(wordcloud(trigram, n, scale = c(1, 2), rot.per = 0, colors = "#609E42"))
 
-graph13
+graph14
 ```
 ```{r}
-# ggsave("../plots/graph13.png", plot = graph13, width = 8, height = 8, dpi = 300)
+# ggsave("../plots/graph14.png", plot = graph14, width = 8, height = 8, dpi = 300)
 ```
 
 Barplot
 
 ```{r}
-graph15 <- trigram_counts %>%
+graph16 <- trigram_counts %>%
   mutate(trigram = fct_reorder(trigram, n, .desc = FALSE)) %>%# To order them from higher to lower
   mutate(word = reorder(trigram, -n)) %>%
   slice_head(n= 10)%>%   # Filter only the top ten trigrams
@@ -1057,10 +1091,10 @@ graph15 <- trigram_counts %>%
   theme(panel.grid.major.y = element_blank())+
   theme(plot.title = element_text(hjust = 0.4))
 
-graph15
+graph16
 ```
 ```{r}
-ggsave("../plots/graph15.png", plot = graph15, width = 8, height = 8, dpi = 300)
+ggsave("../plots/graph16.png", plot = graph16, width = 8, height = 8, dpi = 300)
 ```
 
 ## **Latent Dirichlet Allocation**
@@ -1116,7 +1150,7 @@ top_terms_10 <- years_topics_10 %>%
   ungroup() %>%
   arrange(topic, -beta)
 
-top_terms_10 %>%
+graph17 <- top_terms_10 %>%
   mutate(term = reorder_within(term, beta, topic)) %>%
   ggplot(aes(beta, term, fill = factor(topic))) +
   geom_col(fill= "#609E42", show.legend = FALSE) +
@@ -1126,6 +1160,10 @@ top_terms_10 %>%
     theme_minimal()+
   theme(axis.text.x= element_blank())
 
+graph17
+```
+```{r}
+ggsave("../plots/graph17.png", plot = graph17, width = 8, height = 8, dpi = 300)
 ```
 
 # LDA k=6
@@ -1160,7 +1198,7 @@ top_terms_6 <- years_topics_6 %>%
   ungroup() %>%
   arrange(topic, -beta)
 
-top_terms_6 %>%
+graph18 <- top_terms_6 %>%
   mutate(term = reorder_within(term, beta, topic)) %>%
   ggplot(aes(beta, term, fill = factor(topic))) +
   geom_col(fill= "#609E42", show.legend = FALSE) +
@@ -1170,6 +1208,10 @@ top_terms_6 %>%
     theme_minimal()+
   theme(axis.text.x= element_blank())
 
+graph18
+```
+```{r}
+ggsave("../plots/graph18.png", plot = graph18, width = 8, height = 8, dpi = 300)
 ```
 
 # LDA k=4
@@ -1201,7 +1243,7 @@ top_terms_4 <- years_topics_4 %>%
   ungroup() %>%
   arrange(topic, -beta)
 
-top_terms_4 %>%
+graph19 <- top_terms_4 %>%
   mutate(term = reorder_within(term, beta, topic)) %>%
   ggplot(aes(beta, term, fill = factor(topic))) +
   geom_col(fill= "#609E42", show.legend = FALSE) +
@@ -1210,10 +1252,14 @@ top_terms_4 %>%
   labs(x = NULL, y = NULL, title = "Most common words in each of the 4 topics")+
     theme_minimal()+
   theme(axis.text.x= element_blank())
+
+graph19
+```
+```{r}
+ggsave("../plots/graph19.png", plot = graph19, width = 8, height = 8, dpi = 300)
 ```
 
-Independently from the number of categories selected (10, 6 and 4) the word count top ten words, like "compañía", "millón", "porcentaje" or "euros", are repeated in most of the categories at the same time.
-This result is probably due to the fact that those words are really frequent words in my press release data, consequently, those words do not provide discriminative inbformation for topic detection. Therefore, I am going to remove those words to apply LDA again, in order to identify more concrete topics.
+Independently from the number of categories selected (10, 6 and 4) the word count top ten words, like "compañía", "millón", "porcentaje" or "euros", are repeated in most of the categories at the same time. This result is probably due to the fact that those words are really frequent words in my press release data, consequently, those words do not provide discriminative information for topic detection. Therefore, I am going to remove those words to apply LDA again, in order to identify more concrete topics.
 
 Despite the fact that those words do not contribute to discriminate information for specific topic detection, they are common language used in Mercadona press releases and they could be considered part of the basic structure of Mercadona press releases.
 
@@ -1278,7 +1324,7 @@ top_terms2_6 <- years_topics2_6%>%
   ungroup() %>%
   arrange(topic, -beta)
 
-top_terms2_6 %>%
+graph20 <- top_terms2_6 %>%
   mutate(term = reorder_within(term, beta, topic)) %>%
   ggplot(aes(beta, term, fill = factor(topic))) +
   geom_col(fill= "#609E42", show.legend = FALSE) +
@@ -1287,6 +1333,11 @@ top_terms2_6 %>%
   labs(x = NULL, y = NULL, title = "Most common words in each of the 6 topics")+
     theme_minimal()+
   theme(axis.text.x= element_blank())
+
+graph20
+```
+```{r}
+ggsave("../plots/graph20.png", plot = graph20, width = 8, height = 8, dpi = 300)
 ```
 
 # LDA removed words k=4
@@ -1318,18 +1369,23 @@ top_terms2_4 <- years_topics2_4%>%
   ungroup() %>%
   arrange(topic, -beta)
 
-top_terms2_4 %>%
+graph21 <- top_terms2_4 %>%
   mutate(term = reorder_within(term, beta, topic)) %>%
   ggplot(aes(beta, term, fill = factor(topic))) +
   geom_col(fill= "#609E42", show.legend = FALSE) +
   facet_wrap(~ topic, ncol=2, scales = "free") +
   scale_y_reordered()+
-  labs(x = NULL, y = NULL, title = "Most common words in each of the 6 topics")+
+  labs(x = NULL, y = NULL, title = "Most common words in each of the 4 topics")+
     theme_minimal()+
   theme(axis.text.x= element_blank())
+
+graph21
+```
+```{r}
+ggsave("../plots/graph21.png", plot = graph21, width = 8, height = 8, dpi = 300)
 ```
 
-Again, independently the number of categories selected there is five words that are repeated in most of the categories at the same time, logísitico, empresa, online, tienda y modelo. Probably this words are not specific or distinc enough to identify specific topics, because they are generic or common in the press release and also shape Mercadona press release basic structure. 
+Again, independently the number of categories selected there is five words that are repeated in most of the categories at the same time, logísitico, empresa, online, tienda y modelo. Probably this words are not specific or distinct enough to identify specific topics, because they are generic or common in the press release and also shape Mercadona press release basic structure. 
 
 Hence, I am also removing these words to focus on identifying more unique and informative terms.
 
@@ -1391,7 +1447,7 @@ top_terms3_2 <- years_topics3_2%>%
   ungroup() %>%
   arrange(topic, -beta)
 
-top_terms3_2 %>%
+graph22 <- top_terms3_2 %>%
   mutate(term = reorder_within(term, beta, topic)) %>%
   ggplot(aes(beta, term, fill = factor(topic))) +
   geom_col(fill= "#609E42", show.legend = FALSE) +
@@ -1400,6 +1456,11 @@ top_terms3_2 %>%
   labs(x = NULL, y = NULL, title = "Most common words in each of the 2 topics")+
     theme_minimal()+
   theme(axis.text.x= element_blank())
+
+graph22
+```
+```{r}
+ggsave("../plots/graph22.png", plot = graph22, width = 8, height = 8, dpi = 300)
 ```
 
 After aplying LDA to conclusions can be extracted:
@@ -1413,8 +1474,13 @@ mercadona_structure <- c("cliente", "producto", "supermercado", "euros", "nuevo"
 word_freq <- table(mercadona_structure)
 
 set.seed(234)
-wordcloud(words = names(word_freq),
+graph23 <- wordcloud(words = names(word_freq),
           freq = as.numeric(word_freq), scale=c(2, 3), colors = "#609E42")
+
+graph23
+```
+```{r}
+#ggsave("../plots/graph23.png", plot = graph23, width = 8, height = 8, dpi = 300)
 ```
 
 
