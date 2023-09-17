@@ -1,7 +1,7 @@
 # Computational-Social-Sciences-TFM-README
 ## Introduction
 
-This repository contains two folders. In "thesis_research" you can find my complete master´s thesis and the presentation that summarizing it. In the "thesis_code" folder, there are three subfolders: "datasets," "plots," and "scripts." Inside the "scripts" folder, you will find two codes necessary to replicate my thesis: one based on R, which serves as the primary code, and another code based on Python, which is required for the specific task of lemmatizing words.
+This repository contains two folders. In "thesis_research" you can find my complete master´s thesis and the presentation summarizing it. In the "thesis_code" folder, there are three subfolders: "datasets," "plots," and "scripts." Inside the "scripts" folder, you will find two codes necessary to replicate my thesis: one based on R (.Rmd), which serves as the primary code, and another code based on Python using Jupyter Notebook (.ipynb), which is required for the specific task of lemmatizing words.
 
 Lemmatization was the only coding step carried out in Python because, when compared to R, this programming language offers more powerful natural language processing libraries for lemmatization.
 
