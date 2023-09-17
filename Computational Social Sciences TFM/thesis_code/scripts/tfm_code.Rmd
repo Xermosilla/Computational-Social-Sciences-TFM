@@ -1,0 +1,1467 @@
+---
+title: "Computational Social Sciences TFM"
+author: "Raquel Sánchez-Hermosilla"
+date: "2023-06-04"
+output: html_notebook
+---
+
+# Libraries
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+#data harvesting
+library(httr)
+library(xml2)
+library(stringr)
+#text mining
+library(tidytext)
+library(stopwords) 
+library(wordcloud)
+library(forcats)
+#LDA
+library(quanteda)
+library(topicmodels)
+```
+
+# **Literature review graph**
+
+```{r}
+infoadex_data <- read.csv("../datasets/infoadex_data.csv", sep = ";")
+
+infoadex_data  <- infoadex_data %>% mutate(LIDL = round(mean(LIDL), 2),#get means
+                                 Carrefour = round(mean(Carrefour), 2),
+                                 DÍA = round(mean(DÍA), 2),
+                                 ALDI = round(mean(ALDI),2),
+                                 Eroski = round(mean(Eroski), 2),
+                                 Ahorramás = round(mean(Ahorramás), 2),
+                                 Alcampo = round(mean(Alcampo),2),
+                                 Mercadona = round(mean(Mercadona),2)) %>%
+  slice(1:(n() - 2)) %>%#drop columns with repeated values
+  pivot_longer(cols = c(LIDL, Carrefour, DÍA, ALDI, Eroski, Ahorramás, Alcampo, Mercadona),#pivot to plot it
+               names_to = "Supermarket",
+               values_to = "Mean")
+
+graph1<-  ggplot(infoadex_data, aes(x = reorder(Supermarket, Mean), y = Mean)) +
+  geom_bar(stat = "identity", fill="#609E42") +
+  geom_text(aes(label = paste0("\u20AC", Mean)), vjust = -0.5) +
+  labs(title = "Mean of millions invested in advertising during 2016, 2017 and 2018 \n according to Infoadex",
+       x = NULL,
+       y = "Average millions spent") +
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5))
+
+graph1
+
+```
+```{r}
+ggsave("../plots/graph1.png", plot = graph1, width = 8, height = 8, dpi = 300)
+```
+
+# **Data gathering and processing**
+
+# Data gathering
+
+## User agent
+
+1. Add name and email to user agent
+
+```{r}
+my_user_agent <- "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36 Edg/112.0.1722.39; Raquel Sánchez-Hermosilla / raquelsh1701@gmail.com"
+
+options(HTTPUserAgent = my_user_agent)
+```
+
+2. Set user agent
+
+```{r}
+set_config(
+ user_agent(
+"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36 Edg/112.0.1722.39; Raquel Sánchez-Hermosilla / raquelsh1701@gmail.com"))
+```
+
+## Manually create the list with 109 url: 
+
+As they are 109 URLs, in order to make it easier to spot scrapping problems,
+first I built this script for each of the ten years. This way I made sure every 
+press release per year was properly scrapped, and I was able to create this final
+code with the 109 press releases.
+
+```{r}
+urls_all <- list("https://info.mercadona.es/es/actualidad/mercadona-traslada-al-gobierno-vasco-su-proyecto-y-estrategia-empresarial-en-euskadi/news?idCategoriaSeleccionada=1470731303671",#1º 2013
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-invierte-650-millones-de-euros-y-crea-4000-nuevos-puestos-de-trabajo-fijos-en-2012/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-comunica-al-gobierno-de-ceuta-su-intencion-de-implantarse-en-la-ciudad-autonoma/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-comunica-al-gobierno-de-melilla-su-intencion-de-implantarse-en-la-ciudad-autonoma-/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-pone-en-marcha-su-nuevo-bloque-logistico-en-guadix-granada-0/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-y-los-sindicatos-firman-el-nuevo-convenio-colectivo-hasta-2018/news?idCategoriaSeleccionada=1470731303671",#6º 2013
+                 
+                 "https://info.mercadona.es/es/actualidad/la-facturacion-de-mercadona-crece-un-4-y-alcanza-los-19812-millones-de-euros-en-2013/news?idCategoriaSeleccionada=1470731303671",#1º 2014
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-apuesta-por-la-innovacion-sus-interproveedores-duplican-la-media-de-recursos-en-idi-/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-reparte-un-25-de-sus-beneficios-entre-sus-trabajadores/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-finaliza-la-implantacion-de-la-nueva-seccion-de-horno-en-todos-sus-supermercados/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-destaca-por-su-apuesta-por-la-conciliacion-familiar-y-laboral-de-sus-trabajadores/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-invierte-hasta-agosto-175-millones-de-euros-en-la-apertura-de-35-tiendas/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-reconocida-internacionalmente-por-impulsar-buenas-practicas-en-recursos-humanos/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-abre-su-primer-supermercado-en-vitoriagasteiz-0/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-firma-un-convenio-con-el-ayuntamiento-de-vitoriagasteiz-y-gilsa-para-construir-un-bloque-logistico-en-euskadi/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-invierte-5-millones-de-euros-para-incorporar-la-ultima-tecnologia-contactless-en-todos-sus-supermercados/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-anuncia-su-interes-en-instalarse-en-la-almadraba/news?idCategoriaSeleccionada=1470731303671", #11º 2014 
+                 "https://info.mercadona.es/es/actualidad/las-ventas-de-mercadona-crecen-un-2-hasta-los-20161-millones-de-euros/news?idCategoriaSeleccionada=1470731303671", #1º 2015
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-invirtio-285-millones-de-euros-en-aperturas-y-mejoras-de-sus-tiendas-en-2014/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-incorpora-4000-personas-para-la-campana-de-verano-0/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/la-crema-de-aceite-de-oliva-de-mercadona-cumple-8-anos-con-unas-ventas-de-1500000-de-unidades-al-mes/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/oleoestepa-nuevo-proveedor-de-mercadona-de-aceite-de-oliva-virgen-extra-gran-seleccion-cooperativa-hacendado/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-comienza-las-obras-de-su-bloque-logistico--de-vitoriagasteiz/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-y-los-proveedores-lacteos-de-hacendado-suben-el-precio-de-la-leche-a-sus-ganaderos/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-abre-un-supermercado-en-barakaldo-/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-invierte-226-millones-de-euros-en-60-nuevas-aperturas-y-reformas/news?idCategoriaSeleccionada=1470731303671", #9º 2015
+                 "https://info.mercadona.es/es/actualidad/mercadona-incrementa-su-facturacion-un-3-hasta-los-20831-millones-de-euros-0/news?idCategoriaSeleccionada=1470731303671",#1º 2016
+                  "https://info.mercadona.es/es/actualidad/mercadona-contratara-5000-personas-para-la-campana-de-verano/news?idCategoriaSeleccionada=1470731303671",
+                  "https://info.mercadona.es/es/actualidad/mercadona-abre-un-supermercado-en-irun-/news?idCategoriaSeleccionada=1470731303671",
+                  "https://info.mercadona.es/es/actualidad/mercadona-aprueba-iniciar-su-proyecto-de-internacionalizacion-en-portugal/news?idCategoriaSeleccionada=1470731303671",
+                 "https://info.mercadona.es/es/actualidad/mercadona-contratara-a-120-directivos-para-portugal-/news?idCategoriaSeleccionada=1470731303671",
+                 "https://info.mercadona.es/es/actualidad/mercadona-avanza-en-la-transformacion-digital-e-inicia-las-obras-del-nuevo-centro-de-proceso-de-datos-en-villadangos-leon/news?idCategoriaSeleccionada=1470731303671",
+                 "https://info.mercadona.es/es/actualidad/mercadona-supera-las-1600-tiendas-en-espana/news?idCategoriaSeleccionada=1470731303671",
+                 "https://info.mercadona.es/es/actualidad/aguamur-y-valle-de-san-juan-se-convierten-en-nuevos-fabricantes-interproveedores-de-mercadona-/news?idCategoriaSeleccionada=1470731303671",
+                 "https://info.mercadona.es/es/actualidad/el-ratio-de-exito-de-los-nuevos-productos-innovadores-por-mercadona-y-sus-interproveedores-es-del-82-frente-al-24-del-sector/news?idCategoriaSeleccionada=1470731303671",
+                 "https://info.mercadona.es/es/actualidad/mercadona-construira-su-principal-bloque-logistico-regulador-en-una-parcela-de-parc-sagunt-/news?idCategoriaSeleccionada=1470731303671",
+                 "https://info.mercadona.es/es/actualidad/mercadona-inaugura-su-nuevo-modelo-de-tienda-eficiente-e-invertira-180-millones-de-euros-en-reformas-en-2017-/news?idCategoriaSeleccionada=1470731303671",#10º 2016
+                 
+                 "https://info.mercadona.es/es/actualidad/mercadona-abrira-su-primer-centro-de-coinnovacion-en-portugal/news?idCategoriaSeleccionada=1470731303671",#1º 2017
+                  "https://info.mercadona.es/es/actualidad/mercadona-incrementa-su-facturacion-un-39-hasta-los-21623-millones-de-euros-y-crea-4000-nuevos-empleos-fijos/news?idCategoriaSeleccionada=1470731303671",
+                  "https://info.mercadona.es/es/actualidad/mercadona-contrata-a-7000-personas-para-la-campana-de-verano-2017-/news?idCategoriaSeleccionada=1470731303671",
+                  "https://info.mercadona.es/es/conocenos/sala-de-prensa/hemeroteca/mercadona-adquiere-mas-de-200000-metros-cuadrados-en-tres-parcelas-de-parc-sagunt-/news?idCategoriaSeleccionada=1470731303723",
+                  "https://info.mercadona.es/es/conocenos/sala-de-prensa/hemeroteca/mercadona-acelera-su-plan-de-innovacion-digital-de-la-mano-de-sap/news?idCategoriaSeleccionada=1470731303723", #5º 2017
+                 
+                 "https://info.mercadona.es/es/conocenos/sala-de-prensa/hemeroteca/mercadona-inicia-la-segunda-fase-de-sus-instalaciones-en-albalat-dels-sorells-valencia/news?idCategoriaSeleccionada=1470731303723",#1º 2018
+                  "https://info.mercadona.es/es/cuidemos-el-planeta/nuestros-hechos/mercadona-y-sus-proveedores-de-transporte-invertiran-4-millones-de-euros-mas-en-2018-en-tecnologias-limpias/news?idCategoriaSeleccionada=1470731340250",
+                  "https://info.mercadona.es/es/actualidad/mercadona-incrementa-su-facturacion-un-6-hasta-los-22915-millones-y-crea-5000-nuevos-empleos-fijos/news?idCategoriaSeleccionada=1470731303671",
+                  "https://info.mercadona.es/es/actualidad/mercadona-construira-un-nuevo-bloque-logistico-inteligente-en-plaza-zaragoza/news?idCategoriaSeleccionada=1470731303671",
+                  "https://info.mercadona.es/es/actualidad/mercadona-contrata-a-9000-personas-para-la-campana-de-verano-de-2018/news?idCategoriaSeleccionada=1470731303671",
+                  "https://info.mercadona.es/es/actualidad/mercadona-inicia-las-pruebas-de-su-proyecto-de-compra-online-en-valencia-/news?idCategoriaSeleccionada=1470731303671",
+                  "https://info.mercadona.es/es/actualidad/mercadona-invertira-35-millones-de-euros-en-la-ampliacion-de-su-bloque-logistico-de-huevar/news?idCategoriaSeleccionada=1470731303671",
+                  "https://info.mercadona.es/es/actualidad/mercadona-abre-hoy-su-primer-supermercado-en-la-ciudad-autonoma-de-ceuta-/news?idCategoriaSeleccionada=1470731303671",
+                  "https://info.mercadona.es/es/actualidad/csic-y-mercadona-establecen-una-colaboracion-para-mejorar-la-seguridad-y-calidad-de-los-productos-de-la-pesca/news?idCategoriaSeleccionada=1470731303671",
+                  "https://info.mercadona.es/es/actualidad/mercadona-inaugura-su-primera-tienda-en-la-palma-/news?idCategoriaSeleccionada=1470731303671",
+                  "https://info.mercadona.es/es/actualidad/mercadona-abre-su-primer-supermercado-en-la-ciudad-autonoma-de-melilla-/news?idCategoriaSeleccionada=1470731303671",
+                  "https://info.mercadona.es/es/actualidad/mercadona-y-los-sindicatos-firman-un-nuevo-convenio-colectivo-de-empresa-mas-igualitario-y-social/news?idCategoriaSeleccionada=1470731303671",#12º 2018
+                 
+                 "https://info.mercadona.es/es/actualidad/mercadona-invierte-29-millones-de-euros-en-la-renovacion-de-los-uniformes-de-todos-los-trabajadores-de-tienda/news?idCategoriaSeleccionada=1470731303671",#1º 2019
+                 "https://info.mercadona.es/es/cuidemos-el-planeta/nuestros-hechos/mercadona-avanza-a-abril-de-2019-la-sustitucion-total-de-las-bolsas-de-plastico-por-otras-de-papel-y-material-reciclado-/news?idCategoriaSeleccionada=1470731340250",
+                 
+                 "https://info.mercadona.es/es/actualidad/mercadona-incrementa-su-inversion-un-50-hasta-los-1504-millones-y-factura-un-6-mas-24305-millones/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/cuidemos-el-planeta/nuestros-hechos/mercadona-culmina-la-sustitucion-total-de-las-bolsas-de-plastico-por-otras-de-papel-y-de-material-reciclado/news?idCategoriaSeleccionada=1470731340250",
+                 
+                 "https://info.mercadona.es/es/actualidad/mercadona-inicia-un-proceso-de-captacion-de-talento-para-incorporar-a-mas-de-200-personas-a-su-departamento-de-informatica/news?idCategoriaSeleccionada=1470731303671",
+                 "https://info.mercadona.es/es/actualidad/mercadona-contrata-a-9000-personas-para-la-campana-de-verano-de-2019-/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/actualidad/mercadona-inicia-la-expansion-de-la-compra-online-en-barcelona/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/actualidad/mercadona-abre-su-primera-tienda-en-portugal-/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/actualidad/juan-roig-recibe-al-presidente-de-la-republica-portuguesa-marcelo-rebelo-de-sousa-en-el-primer-supermercado-de-mercadona-en-portugal/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/actualidad/mercadona-apertura-su-nuevo-modelo-de-tienda-eficiente-en-tavernes-blanques-valencia/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/actualidad/mercadona-amplia-a-28-sus-proveedores-espanoles-de-cerveza-con-nuevas-referencias-artesanales-/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/actualidad/mercadona-incorpora-200-informaticos-y-preve-contratar-a-200-mas-en-los-proximos-meses-/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/actualidad/mercadona-y-lanzadera-buscan-empresas-innovadoras-para-impulsar-el-cambio-sostenible-de-la-cadena-alimentaria/news?idCategoriaSeleccionada=1470731303671",
+                 "https://info.mercadona.es/es/actualidad/fundacion-once-y-mercadona-apuestan-por-la-plena-inclusion-de-las-personas-con-discapacidad/news?idCategoriaSeleccionada=1470731303671",#14º 2019
+                 "https://info.mercadona.es/es/actualidad/mercadona-inicia-la-actividad-de-su-nuevo-bloque-logistico-en-plaza/news?idCategoriaSeleccionada=1470731303671",#1º 2020
+                  
+                 "https://info.mercadona.es/es/actualidad/mercadona-incrementa-su-inversion-un-46-hasta-los-2200-millones-y-factura-25000-millones-un-5-mas/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/actualidad/mercadona-informa-de-que-se-adoptan-las-siguientes-medidas-que-entraran-en-vigor-desde-manana-lunes-16-de-marzo-de-2020/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/actualidad/actualizacion-mercadona-informa-de-que-se-adoptan-las-siguientes-medidas-que-entraran-en-vigor-desde-manana-jueves-19-de-marzo-de-2020/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/actualidad/actualizacion-2-mercadona-informa-de-que-se-adoptan-las-siguientes-medidas-que-entraran-en-vigor-desde-el-lunes-23-de-marzo-de-2020/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/actualidad/actualizacion-3-mercadona-informa-de-que-se-adoptan-las-siguientes-medidas-que-entraran-en-vigor-desde-manana-jueves-26-de-marzo-de-2020/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/actualidad/mercadona-en-colaboracion-con-el-banco-de-alimentos-de-madrid-entrega-productos-al-hospital-de-campana-de-ifema/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/actualidad/actualizacion-4-mercadona-informa-de-que-se-adoptan-las-siguientes-medidas-que-entraran-en-vigor-desde-manana-viernes-3-de-abril-de-2020/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/actualidad/mercadona-en-colaboracion-con-la-unidad-militar-de-emergencias-ume-entrega-productos-basicos-de-higiene-al-hospital-de-campana-de-ifema/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/actualidad/mercadona-pone-en-marcha-su-nuevo-servicio-online-en-madrid-centro/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/actualidad/actualizacion-5-mercadona-informa-de-que-se-adoptan-las-siguientes-medidas-que-entraran-en-vigor-el-lunes-11-y-el-jueves-14-de-mayo/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/actualidad/actualizacion-6-mercadona-informa-de-que-se-adopta-la-siguiente-medida-que-entrara-en-vigor-el-lunes-1-de-junio/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/actualidad/mercadona-implanta-la-jornada-laboral-de-5-dias-para-el-personal-de-sus-supermercados/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/actualidad/mercadona-culmina-la-construccion-de-su-bloque-logistico-en-euskadi-tras-invertir-mas-de-187-millones-de-euros-y-crear-480-empleos/news?idCategoriaSeleccionada=1470731303671",
+                 
+                 "https://info.mercadona.es/es/cuidemos-el-planeta/nuestros-hechos/72-tiendas-625-visibilizan-nuestra-estrategia-de-reduccion-de-plastico-/news?idCategoriaSeleccionada=1470731340250",#15º 2020
+                 
+                 "https://info.mercadona.es/es/cuidemos-el-planeta/nuestros-hechos/mercadona-cumple-con-su-compromiso-y-elimina-las-bolsas-de-plastico-de-un-solo-uso-en-todas-sus-tiendas/news?idCategoriaSeleccionada=1470731340250",#1º 2021
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-comparte-409-millones-de-euros-con-toda-su-plantilla/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/cuidemos-el-planeta/nuestros-hechos/mercadona-elimina-los-desechables-de-plastico-de-un-solo-uso-y-los-sustituye-por-menaje-sostenible/news?idCategoriaSeleccionada=1470731340250",
+                  
+                  "https://info.mercadona.es/es/cuidemos-el-planeta/nuestros-hechos/mercadona-incorpora-plastico-reciclado-para-mejorar-el-envase-de-sus-pizzas-refrigeradas-/news?idCategoriaSeleccionada=1470731340250",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-crea-5000-nuevos-puestos-de-trabajo-y-factura-26932-millones-un-55-mas-en-2020/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-invierte-mas-de-5-millones-de-euros-al-ano-en-mascarillas-corporativas-higienicas-reutilizables-para-su-plantilla/news?idCategoriaSeleccionada=1470731303671",
+                  
+                "https://info.mercadona.es/es/conocenos/sala-de-prensa/hemeroteca/mercadona-amplia-su-bloque-logistico-de-san-isidro-alicante-con-una-inversion-total-de-98-millones-de-euros/news?idCategoriaSeleccionada=1470731303723",
+                
+                "https://info.mercadona.es/es/cuidemos-el-planeta/nuestros-hechos/mercadona-reduce-el-consumo-energetico-en-397-millones-kwh-en-2019-y-2020/news?idCategoriaSeleccionada=1470731340250",
+                
+                "https://info.mercadona.es/es/conocenos/sala-de-prensa/hemeroteca/mercadona-invierte-28-millones-de-euros-en-un-bloque-logistico-en-getafe-madrid/news?idCategoriaSeleccionada=1470731303723",
+                
+                "https://info.mercadona.es/es/conocenos/sala-de-prensa/hemeroteca/mercadona-pone-en-marcha-el-nuevo-bloque-logistico-de-zaragoza-tras-invertir-45-millones-de-euros/news?idCategoriaSeleccionada=1470731303723",
+                
+                "https://info.mercadona.es/es/conocenos/sala-de-prensa/hemeroteca/mercadona-inicia-las-obras-de-su-nuevo-almacen-online-en-alicante-con-una-inversion-de-14-millones-de-euros/news?idCategoriaSeleccionada=1470731303723",
+                
+                "https://info.mercadona.es/es/cuidemos-el-planeta/nuestros-hechos/se-cumple-un-ano-de-la-estrategia-625-de-mercadona-para-la-reduccion-del-plastico/news?idCategoriaSeleccionada=1470731340250",
+                
+                "https://info.mercadona.es/es/cuidemos-el-planeta/nuestros-hechos/mercadona-inicia-una-prueba-con-un-nuevo-camion-100-electrico-y-libre-de-emisiones-gei-pm-y-nox/news?idCategoriaSeleccionada=1470731340250",
+                
+                "https://info.mercadona.es/es/actualidad/mercadona-y-los-sindicatos-firman-un-nuevo-plan-de-igualdad-que-refuerza-la-transparencia-en-su-politica-retributiva/news?idCategoriaSeleccionada=1470731303671",
+                
+                "https://info.mercadona.es/es/actualidad/mercadona-iniciara-las-obras-de-su-futuro-almacen-para-la-venta-online-de-sevilla-en-enero/news?idCategoriaSeleccionada=1470731303671",#15º 2021
+                "https://info.mercadona.es/es/actualidad/el-comite-de-direccion-de-mercadona-acuerda-incrementar-un-65-el-sueldo-a-la-plantilla/news?idCategoriaSeleccionada=1470731303671",#1º 2022
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-factura-un-33-mas-hasta-los-27819-millones-y-reduce-su-beneficio-un-6-por-el-impacto-de-los-costes/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-dona-15-millones-de-euros-para-ayudar-a-los-refugiados-por-la-guerra-de-ucrania/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-sigue-apostando-por-la-venta-online-con-la-apertura-de-su-cuarta-colmena-en-alicante/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-lanza-su-nueva-compra-online-en-murcia/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-invierte-mas-de-60-me-en-la-optimizacion-y-modernizacion-de-su-nave-para-frescos-del-bloque-logistico-de-riba-roja-del-turia-valencia/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/cuidemos-el-planeta/nuestros-hechos/mercadona-acelera-la-reduccion-de-plastico-desde-hace-dos-anos-a-traves-de-su-estrategia-625/news?idCategoriaSeleccionada=1470731340250",
+                  
+                  "https://info.mercadona.es/es/actualidad/mercadona-online-alcanza-los-2000-trabajadores-y-preve-facturar-530-millones-de-euros-en-2022/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/la-nueva-compra-online-de-mercadona-llega-a-huelva/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/mas-de-250-trabajadores-de-mercadona-se-trasladan-a-sus-nuevas-oficinas-en-albalat-dels-sorells-valencia/news?idCategoriaSeleccionada=1470731303671",
+                  
+                  "https://info.mercadona.es/es/actualidad/el-comite-de-direccion-de-mercadona-aprueba-incrementar-el-sueldo-de-la-plantilla-de-acuerdo-con-el-ipc/news?idCategoriaSeleccionada=1470731303671"#11º 2022
+                )
+```
+
+## Scrappping first URL (to find paths and see that it works)
+
+```{r}
+urlall_1 <- "https://info.mercadona.es/es/actualidad/mercadona-traslada-al-gobierno-vasco-su-proyecto-y-estrategia-empresarial-en-euskadi/news?idCategoriaSeleccionada=1470731303671"
+
+urlall_1_raw <-  read_html(urlall_1) 
+
+urlall_1_title <- urlall_1_raw %>% xml_find_all("//h1[@class = 'title']")%>% xml_text()
+
+urlall_1_text <- urlall_1_raw  %>% xml_find_all("//div[@class = 'detail-new']")%>% xml_text()
+
+urlall_1_total <- paste(urlall_1_title, urlall_1_text )
+```
+
+## Build a fuction with above steps
+
+```{r}
+
+function_mercadona <- function(url) {
+  Sys.sleep(5)
+  page <- read_html(url)
+  title <- page %>% xml_find_all("//h1[@class = 'title']") %>% xml_text()
+  text <- page %>% xml_find_all("//div[@class = 'detail-new']") %>% xml_text()
+  return(paste(title, text))
+}
+```
+
+## Do a loop to get 109 url text: title, subtitle and body text of each press release
+
+```{r}
+list_mercadona_all <- list()
+
+for (url in urls_all) {
+  result <- function_mercadona(url)
+  list_mercadona_all[[length(list_mercadona_all) + 1]] <- result
+}
+
+#print(list_mercadona_all)
+```
+
+## Transform list results to a data frame with 109 rows and one column
+
+```{r}
+df_mercadona_dirty <- as.data.frame(do.call(rbind, list_mercadona_all))
+
+#df_mercadona_all[1,] #check content of first row in the data frame
+
+```
+
+## Save dirty data frame before cleaning
+
+```{r}
+write.csv(df_mercadona_dirty, "../datasets/df_mercadona_dirty.csv")
+```
+
+# Data processing
+
+## Mercadona word and HTML symbols 
+
+Removing from the scrapped text the word "Mercadona", because it is repeated too may times, which would bias the text content analysis, and also HTML code symbols \n (newline), \r (carriage return), and \t (tab).
+
+```{r}
+df_mercadona_clean <- data.frame(lapply(df_mercadona_dirty, function(x) gsub("[\n\r\t]+|Mercadona|MERCADONA", "", x)))#apply gsub function to each element of the data frame, using the lapply function, and creating a new data frame with the cleaned strings. 
+
+#df_mercadona_all_clean[1,] 
+```
+
+## Not loosing some symbols that give information about text content (€ and %)
+
+```{r}
+df_mercadona_clean <- data.frame(lapply(df_mercadona_clean, function(x) gsub("([0-9]+)€", "\\1 euros ", x)))#is replacing the numeric value followed by the symbol, with the same numeric value followed by the string "euros" or "porcentaje"
+
+df_mercadona_clean <- data.frame(lapply(df_mercadona_clean, function(x) gsub("([0-9]+)%", "\\1 porcentaje ", x)))
+
+#df_mercadona_all_clean[1,]
+```
+
+## Adding a space in front of any uppercase next to a lowercase
+
+Because many scrapped words that started with uppercase were stuck to the previous word
+
+```{r}
+df_mercadona_clean <- data.frame(lapply(df_mercadona_clean, function(x) gsub("([A-Z][a-z])", "\\1", x)))
+
+#df_mercadona_all_clean[1,]
+```
+
+## "Coinnovación" part of Mercadona strategy
+
+```{r}
+df_mercadona_clean<- data.frame(lapply(df_mercadona_clean, function(x) gsub("Co-innovación|co-innovación|coinnovación|Coinnovación", " coinnovación ", x )))
+
+#df_mercadona_all_clean[38,]
+```
+
+## Removing digits despite years that start with 19 or 20
+
+The concrete numbers give no information, it is important to know what they are talking about, millions of employees or euros, but not the quantity itself.
+
+Nevertheless, years are informative as a word, so I am going to keep this century
+and the previous one just in case Mercadona talks about their past or recent 
+history in the press releases.
+
+```{r}
+df_mercadona_clean <- data.frame(lapply(df_mercadona_clean, function(x) gsub("\\b(?!(?:19|20)\\d{2}\\b)\\d+\\b", "", x, perl = TRUE)))#regular expression from chat GPT
+                                             
+#df_mercadona_all_clean[1,]
+```
+
+## Removing puntuation characters
+
+Needed to create the term matrix for LDA
+
+```{r}
+df_mercadona_clean <- data.frame(lapply(df_mercadona_clean, function(x) gsub("[[:punct:]]", "", x)))#regular expresssion from https://statisticsglobe.com/remove-all-special-characters-from-string-in-r
+
+#df_mercadona_all_clean[1,]
+```
+
+## "El Jefe", the way in which Mercadona refers to the client
+
+Transformed to "eljefe" to avoid stopwords removing "el" from this important 
+word that always refers to the customer in Mercadona communication.
+
+```{r}
+df_mercadona_clean <- data.frame(lapply(df_mercadona_clean, function(x) gsub("Jefe|jefe|jefes|Jefes", " eljefe ", x)))
+
+#df_mercadona_all_clean[38,]
+```
+
+## Check each press release and clean non useful information
+
+Most of the years had one press release or more with links text, that were 
+scrapped and removed.
+
+```{r}
+#2013 nothing to clean
+
+#2014
+df_mercadona_clean[7,] <- str_replace_all(df_mercadona_clean[7,], "\\s+Memoria\\s+Anual\\s+2013\\s+Descargar", "")
+
+#2015
+df_mercadona_clean[18,] <- str_replace_all(df_mercadona_clean[18,], "\\s+Memoria\\s+Anual\\s+2014\\s+Descargar", "")
+
+#2016
+#1º2016 press release
+df_mercadona_clean[27,] <- str_replace_all(df_mercadona_clean[27,], "\\s+Memoria\\s+Anual\\s+2015\\s+Descargar\\s+", "")
+
+#11º 2016 press release
+df_mercadona_clean[37,] <-
+  str_replace_all(df_mercadona_clean[37,], "(\\s+Descargar\\s+Accede\\s+a\\s+la\\s+Galería\\s+Multimedia\\s+)", "")
+
+#2017
+df_mercadona_clean[39,] <- str_replace_all(df_mercadona_clean[39,], "\\s+Memoria\\s+Anual\\s+2016\\s+Descargar\\s+", "")
+
+#2018
+df_mercadona_clean[45,] <- str_replace_all(df_mercadona_clean[45,], "\\s+Memoria\\s+Anual\\s+2017\\s+Descargar\\s+", "")
+
+#2019
+df_mercadona_clean[57,] <- str_replace_all(df_mercadona_clean[57,], "\\s+Memoria\\s+Anual\\s+2018\\s+Descargar\\s+", "")
+
+#2020
+df_mercadona_clean[70,] <- str_replace_all(df_mercadona_clean[70,], "\\s+Memoria\\s+Anual\\s+2019\\s+Descargar\\s+", "")
+
+#2021 nothiing to clean
+
+#2022
+df_mercadona_clean[100,] <- str_replace_all(df_mercadona_clean[100,], "\\s+Memoria\\s+Anual\\s+2021\\s+Descargar", "")
+```
+
+## Convert all texts to lowercase
+
+This will help when creating the term matrix for LDA
+
+```{r}
+df_mercadona_clean <- data.frame(lapply(df_mercadona_clean, tolower))
+```
+
+## Save clean datatset
+
+```{r}
+write.csv(df_mercadona_clean, "../datasets/df_mercadona_clean.csv")
+```
+
+# **Text mining techniques**
+
+## Add each year as an index
+
+Adding a column with the year to which each press release belongs, as index
+
+```{r}
+df_mercadona_clean <- df_mercadona_clean %>% 
+  rename(pr = V1) %>% #pr = press release"
+  mutate(year = as.character(row_number())) %>%
+    mutate(year = case_when( 
+    row_number() <= 6 ~ "2013",
+   row_number() > 6  & row_number() <= 17 ~ "2014",
+   row_number() > 17 & row_number() <= 26 ~ "2015",
+    row_number()>26 & row_number() <= 37 ~ "2016",
+    row_number()>37 & row_number() <= 42 ~ "2017",
+    row_number()>42 & row_number() <= 54 ~ "2018",
+    row_number()>54 & row_number() <= 68 ~ "2019",
+    row_number()>68 & row_number() <= 83 ~ "2020",
+    row_number()>83 & row_number() <= 98 ~ "2021",
+    row_number()>98 & row_number() <= 109 ~ "2022",
+    TRUE ~ year) )
+```
+
+## Tokenizing, filtering stopwords and lemmatizing
+
+Breaking each press release in words and removing extremely common grammar words or stopwords, like "de" or "para", because those words are so general that they are not useful to analyze press releases content.
+
+```{r}
+stop_words_es <- as_tibble(stopwords("es")) # get spanish stopwords
+
+tokens_mercadona<- df_mercadona_clean %>% unnest_tokens(word, pr)%>% anti_join(stop_words_es, by= c("word" = "value"))
+```
+
+And in order to reduce word dispersion and avoid difficulties when identifying content patterns, I am going to lemmatize each word of the press releases using Python.
+
+```{r}
+#Saving the dataset to lemmatize in Python
+write.csv(tokens_mercadona, "../datasets/tokens_mercadona.csv")
+
+#Python code was build using chat GPT
+
+#Opening the lemmatized dataset 
+lemmatized_mercadona <- read.csv("../datasets/lemmatized_mercadona.csv")
+```
+
+## Word count
+
+### Ten most repeated words in Mercadona press releases
+
+Wordcloud
+
+```{r}
+set.seed(234)
+graph2 <- lemmatized_mercadona %>%
+  count(lemmatized_word, sort = TRUE) %>%
+  head(10) %>% # 10 most repeated words
+  with(wordcloud(lemmatized_word, n, scale=c(2, 3), colors = "#609E42"))
+```
+
+Barplot
+```{r}
+graph3 <- lemmatized_mercadona%>%
+  count(lemmatized_word, sort = TRUE) %>%
+  head(10) %>%  # 10 most repeated words
+  mutate(lemmatized_word = reorder(lemmatized_word, n)) %>%# Order words by number of mentions
+  ggplot(aes(n, lemmatized_word)) +
+  geom_col(fill = "#609E42") +
+  labs(y = NULL, x = NULL) +
+  ggtitle("Top 10 most used words") +
+  theme_minimal()+
+  theme(panel.grid.major.x  = element_line(color = "darkgrey",
+                                          size = 0.1, linetype = 2))+
+  theme(panel.grid.minor.x = element_blank())+
+  theme(panel.grid.major.y = element_blank())+
+  theme(plot.title = element_text(hjust = 0.4))
+
+graph3
+```
+```{r}
+ggsave("../plots/graph3.png", plot = graph3, width = 8, height = 8, dpi = 300)
+```
+
+### Use of specific words across 10 years
+
+El Jefe
+
+```{r}
+lemmatized_mercadona  %>%
+  filter(lemmatized_word == "eljefe")%>%
+  count()%>%
+  rename(coinnovación = n)
+
+graph4 <- lemmatized_mercadona  %>%
+  filter(lemmatized_word == "eljefe")%>%
+  group_by(year) %>% summarise(n=n())%>%
+  mutate(year = as.factor(year)) %>%
+  ggplot(aes(year, n)) +
+  geom_col(fill= "#609E42") +
+  ggtitle('\"El Jefe\" use across years')+
+  labs(y = NULL, x =NULL)+
+  theme_classic()
+
+graph4 
+
+```
+```{r}
+ggsave("../plots/graph4.png", plot = graph4, width = 8, height = 8, dpi = 300)
+```
+
+Coinnovación
+
+```{r}
+lemmatized_mercadona  %>%
+  filter(lemmatized_word == "coinnovación")%>%
+  count()%>%
+  rename(coinnovación = n)
+
+graph5 <- lemmatized_mercadona %>%
+  filter(lemmatized_word == "coinnovación")%>%
+  group_by(year) %>% summarise(n=n())%>%
+  mutate(year = as.factor(year)) %>%
+  ggplot(aes(year, n)) +
+  geom_col(fill= "#609E42") +
+  ggtitle('\"Coinnovación\" use across years')+
+  labs(y = NULL, x=NULL)+
+  theme_classic()
+
+graph5
+```
+```{r}
+ggsave("../plots/graph5.png", plot = graph5, width = 8, height = 8, dpi = 300)
+```
+
+Juan Roig
+
+```{r}
+lemmatized_mercadona  %>%
+  filter(lemmatized_word == "juan" | lemmatized_word == "roig")%>%
+  count()%>%
+  rename(JuanRoig = n)
+
+graph6 <- lemmatized_mercadona %>%
+  filter(lemmatized_word == "juan" | lemmatized_word == "roig")%>%
+  group_by(year) %>% summarise(n=n())%>%
+  mutate(year = as.factor(year)) %>%
+  ggplot(aes(year, n)) +
+  geom_col(fill= "#609E42") +
+  ggtitle('\"Juan Roig\" use across years')+
+  labs(y = NULL, x=NULL)+
+  theme_classic()
+
+graph6
+```
+```{r}
+ggsave("../plots/graph6.png", plot = graph6, width = 8, height = 8, dpi = 300)
+```
+
+Plástico
+
+```{r}
+lemmatized_mercadona  %>%
+  filter(lemmatized_word == "plástico")%>%
+  count()%>%
+  rename(plástico = n)
+
+graph7 <- lemmatized_mercadona %>%
+  filter(lemmatized_word == "plástico")%>%
+  group_by(year) %>% summarise(n=n())%>%
+  mutate(year = as.factor(year)) %>%
+  ggplot(aes(year, n)) +
+  geom_col(fill= "#609E42") +
+  ggtitle('\"Plástico\" use across years')+
+  labs(y = NULL, x=NULL)+
+  theme_classic()
+
+graph7
+```
+```{r}
+ggsave("../plots/graph7.png", plot = graph7, width = 8, height = 8, dpi = 300)
+```
+
+COVID
+
+```{r}
+lemmatized_mercadona  %>%
+  filter(lemmatized_word == "covid")%>%
+  count()%>%
+  rename(covid = n)
+
+lemmatized_mercadona  %>%
+  filter(lemmatized_word == "medida")%>%
+  count()%>%
+  rename(medida = n)
+
+graph8 <- lemmatized_mercadona %>%
+  filter(lemmatized_word == "covid")%>%
+  group_by(year) %>% summarise(n=n())%>%
+  mutate(year = as.factor(year)) %>%
+  ggplot(aes(year, n)) +
+  geom_col(fill= "#609E42") +
+  ggtitle('\"COVID\" use across years')+
+  labs(y = NULL, x=NULL)+
+  theme_classic()
+
+graph8
+
+graph9 <- lemmatized_mercadona %>%
+  filter(lemmatized_word == "medida")%>%
+  group_by(year) %>% summarise(n=n())%>%
+  mutate(year = as.factor(year)) %>%
+  ggplot(aes(year, n)) +
+  geom_col(fill= "#609E42") +
+  ggtitle('\"Medida\" use across years')+
+  labs(y = NULL, x=NULL)+
+  theme_classic()
+
+graph9
+```
+```{r}
+ggsave("../plots/graph8.png", plot = graph8, width = 8, height = 8, dpi = 300)
+ggsave("../plots/graph9.png", plot = graph9, width = 8, height = 8, dpi = 300)
+```
+
+## Term frequency
+
+As each year has different word length, word frequencies are not directly comparable, therefore I am going to use term frequencies because that measure shows the most common words taking into account each year words length. In fact, to calculate erm frequency I need, total number of words in each year and how many times each word appears in each year.
+
+1. How many total words there are in each year: summing up the total number of words in each year.
+
+```{r}
+total_words_by_year <- lemmatized_mercadona %>% 
+  count(year, lemmatized_word, sort = TRUE) %>%
+  group_by(year) %>% #group by year to sum all the totals in the n column
+  summarize(total = sum(n))#create total column with the total of words by year
+
+total_words_by_year
+```
+
+Visualizing it
+
+```{r}
+#ordered by years
+graph10a <- total_words_by_year %>%
+  ggplot(aes(x = as.factor(year))) +
+  geom_col(aes(y = total), width = 0.5, fill= "#609E42") +
+  labs(x = "", y = "Number of words", color = "")  +
+  labs(title = "Total word count variation in press releases across years") +
+  coord_flip() +
+  #change the grid
+  theme_minimal()+
+  theme(panel.grid.major.x  = element_line(color = "darkgrey",
+                                          size = 0.1, linetype = 2))+
+  theme(panel.grid.minor.x = element_blank())+
+  theme(panel.grid.major.y = element_blank())+
+  theme(plot.title = element_text(hjust = 0.4))
+
+graph10a
+
+#ordered by number of total words
+graph10b <- total_words_by_year %>%
+  arrange(desc(total)) %>% # sort rows by total number of words in descending order
+  mutate(year = fct_reorder(as.factor(year), total, .desc = TRUE)) %>%
+  ggplot(aes(x = year)) +
+  geom_col(aes(y = total), width = 0.5, fill= "#609E42") +
+  labs(x = "", y = "Number of words", color = "")  +
+  labs(title = "Total word count variation in press releases across years") +
+  coord_flip() +
+    #change the grid
+  theme_minimal()+
+  theme(panel.grid.major.x  = element_line(color = "darkgrey",
+                                          size = 0.1, linetype = 2))+
+  theme(panel.grid.minor.x = element_blank())+
+  theme(panel.grid.major.y = element_blank())+
+  theme(plot.title = element_text(hjust = 0.4))
+
+graph10b
+```
+```{r}
+ggsave("../plots/graph10a.png", plot = graph10a, width = 8, height = 8, dpi = 300)
+ggsave("../plots/graph10b.png", plot = graph10b, width = 8, height = 8, dpi = 300)
+```
+
+2. How many times each word appears in each year
+
+```{r}
+each_word_by_year <- lemmatized_mercadona %>%
+  #count word frequencies keeping a column for the year the word comes from
+  count(year, lemmatized_word, sort = TRUE)
+
+```
+
+Join total number of words in each year and how many times each word appears in each year to get term frequency
+
+```{r}
+term_frequency_df <- left_join(each_word_by_year, total_words_by_year)#left join because I need the join to keep all rows in each_word_by_year, regardless of repeating rows
+term_frequency_df
+```
+
+Calculate term frequency, which is the number of times a word appears in a year, divided by the total number of words in that year
+
+```{r}
+term_frequency_df <- term_frequency_df %>%
+  mutate(term_frequency = n/total) #add a column for term_frequency
+
+term_frequency_df
+```
+
+### Ten most frequent words in Mercadona press releases
+
+```{r}
+# term_frequency_df$lemmatized_word <- factor(term_frequency_df$lemmatized_word, levels = unique(term_frequency_df$lemmatized_word)[order(term_frequency_df$term_frequency, decreasing = TRUE)])
+
+# graph10 <- term_frequency_df %>%
+#   head(14) %>% #To show the 10 words with higher frequency
+#   ggplot(aes(term_frequency, lemmatized_word)) +
+#   geom_col(fill = "#609E42") +
+#   labs(y = NULL, x = NULL) +
+#   theme_minimal()+
+#   ggtitle("Top 10 words with higher term frequency")+
+#    theme(panel.grid.major.x  = element_line(color = "darkgrey",
+#                                           size = 0.1, linetype = 2))+
+#   theme(panel.grid.minor.x = element_blank())+
+#   theme(panel.grid.major.y = element_blank())+
+#   theme(plot.title = element_text(hjust = 0.4))
+# 
+# graph10
+```
+
+
+```{r}
+graph11 <- term_frequency_df %>%
+  mutate(lemmatized_word = reorder(lemmatized_word, term_frequency)) %>%# Order words by number of mentions
+  head(14) %>% #To show the 10 words with higher frequency
+  ggplot(aes(term_frequency, lemmatized_word)) +
+  geom_col(fill = "#609E42") +
+  labs(y = NULL, x = NULL) +
+  theme_minimal()+
+  ggtitle("Top 10 words with higher term frequency")+
+   theme(panel.grid.major.x  = element_line(color = "darkgrey",
+                                          size = 0.1, linetype = 2))+
+  theme(panel.grid.minor.x = element_blank())+
+  theme(panel.grid.major.y = element_blank())+
+  theme(plot.title = element_text(hjust = 0.4))
+
+graph11
+```
+```{r}
+ggsave("../plots/graph11.png", plot = graph11, width = 8, height = 8, dpi = 300)
+```
+
+## Distinctive words: Get TF-IDF
+
+The function output is tf, idf and a combination of both, tf-idf
+
+```{r}
+tf_idf_df <- term_frequency_df %>%
+  bind_tf_idf(lemmatized_word, year, n)
+
+tf_idf_df
+```
+
+These first words in the data frame have zero TF-IDF, because these are words that occur many times along press releases, hence, they are not distinctive.
+
+# Visualize distinctiveness across years
+
+```{r}
+graph12a <- tf_idf_df %>%
+  select(year, lemmatized_word, tf_idf) %>%
+  mutate(tf_idf = as.numeric(tf_idf)) %>%
+  mutate(lemmatized_word = reorder(lemmatized_word, tf_idf))%>%
+  group_by(year)  %>% 
+  slice_max(tf_idf, n = 8) %>% #8 rows with higher tf_idf from each year
+  ggplot(aes(tf_idf, fct_reorder(lemmatized_word, tf_idf))) +
+  geom_col(position = "dodge", width = 0.8, fill= "#609E42", show.legend = FALSE) +
+  facet_wrap(~year, ncol = 5, scales = "free") +
+  scale_y_reordered()+
+  labs(x = NULL, y = NULL, title = "TF-IDF")+
+    theme_minimal()+
+  theme(axis.text.x= element_blank())#To not show x axis
+
+graph12a
+```
+```{r}
+ggsave("../plots/graph12a.png", plot = graph12a, width = 8, height = 8, dpi = 300)
+```
+
+# Filtering unconvenient words
+
+There is no need to filter stopwords, because with TF-IDF metrics they are just 
+not considered as important words in the text, because grammar words occur many times in both titles, so they have low TF-IDF.
+
+Nevertheless, there are words that provide no meaningful insight for my research, thus, I am going to remove them.
+
+```{r}
+mercadona_stopwords <- tibble(word = c("m", "i"))
+```
+
+Removing those specific words 
+
+```{r}
+tf_idf_df <- tf_idf_df %>% 
+  rename( word = lemmatized_word) 
+
+tf_idf_df <- tf_idf_df %>% 
+  anti_join(mercadona_stopwords, by = "word")
+```
+
+# Visualizing distictiveness without unconvinient words
+
+```{r}
+graph12b <- tf_idf_df %>%
+  select(year, word, tf_idf) %>%
+  mutate(tf_idf = as.numeric(tf_idf)) %>%
+  mutate(word = reorder(word, tf_idf))%>%
+  group_by(year)  %>% 
+  slice_max(tf_idf, n = 4) %>% #4 rows with higher tf_idf from each year
+  ggplot(aes(tf_idf, fct_reorder(word, tf_idf))) +
+  geom_col(position = "dodge", width = 0.5, fill= "#609E42", show.legend = FALSE) +
+  facet_wrap(~year, ncol = 5, scales = "free") +
+  labs(x = NULL, y = NULL, title = "Distinctive Mercadona words across years")+
+    theme_classic()+
+  theme(axis.text.x= element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.title = element_text(hjust = 0.4))
+
+graph12b
+```
+```{r}
+ggsave("../plots/graph12b.png", plot = graph12b, width = 8, height = 8, dpi = 300)
+```
+
+## Bigrams: most common ones
+
+I have been working with words, but it is also important to work with n-grams 
+where n=2. This is due to the fact that bigrams are two words that tend to occur together, which allows to understand the content and context.
+
+```{r}
+mercadona_bigrams <- df_mercadona_clean %>%
+  unnest_tokens(bigram, pr, token = "ngrams", n = 2) %>%
+  filter(!is.na(bigram))
+
+#mercadona_bigrams
+```
+
+The most frequent bigrams:
+
+```{r}
+mercadona_bigrams %>%
+  count(bigram, sort = TRUE)
+```
+
+To remove stopwords, first I am splitting bigrams in two different columns
+
+```{r}
+bigrams_separated <- mercadona_bigrams %>%
+  separate(bigram, c("word1", "word2"), sep = " ")
+
+#bigrams_separated
+```
+
+And secondly, filtering all Spanish stopwords included in each word column 
+
+```{r}
+bigrams_filtered <- bigrams_separated %>%
+  anti_join(stop_words_es, by = c("word1" = "value")) %>%
+  anti_join(stop_words_es, by = c("word2" = "value"))
+
+#bigrams_filtered
+```
+
+To get both words to be a single column again
+
+```{r}
+bigrams_united <- bigrams_filtered %>%
+  unite(bigram, word1, word2, sep = " ")
+
+#bigrams_united
+```
+
+Count bigrams
+
+```{r}
+bigram_counts <- bigrams_united %>% 
+  count(bigram, sort = TRUE)
+
+bigram_counts
+```
+
+### Visualizing most common bigrams
+
+Wordcloud
+
+```{r}
+set.seed(234)
+graph13 <- bigram_counts %>%
+  slice_head(n= 10)%>% 
+  with(wordcloud(bigram, n, scale=c(3, 1), colors = "#609E42"))
+```
+
+Barplot
+
+```{r}
+graph15 <- bigram_counts %>%
+  mutate(bigram = fct_reorder(bigram, n, .desc = FALSE)) %>%# To order them from higher to lower
+  mutate(word = reorder(bigram, -n)) %>%
+ slice_head(n= 10)%>% # Select the top 10 bigrams 
+  ggplot(aes(n, bigram)) +
+  geom_col(fill= "#609E42") +
+  labs(y = NULL, x=NULL)+
+  ggtitle("Top 10 bigrams")+
+  theme_minimal()+
+    theme(panel.grid.major.x  = element_line(color = "darkgrey",
+                                          size = 0.1, linetype = 2))+
+  theme(panel.grid.minor.x = element_blank())+
+  theme(panel.grid.major.y = element_blank())+
+  theme(plot.title = element_text(hjust = 0.4))
+
+graph15
+```
+```{r}
+ggsave("../plots/graph15.png", plot = graph15, width = 8, height = 8, dpi = 300)
+```
+
+## Trigrams: most common words
+
+I have been working with words and bigrams, but it is also important to work with n-grams 
+where n=3, to have deeper insight of Mercadona corpus.
+
+```{r}
+mercadona_trigrams <- df_mercadona_clean %>%
+  unnest_tokens(trigram, pr, token = "ngrams", n = 3) %>%
+  filter(!is.na(trigram))
+
+#mercadona_trigrams
+```
+
+The most frequent trigrams:
+
+```{r}
+mercadona_trigrams %>%
+  count(trigram, sort = TRUE)
+```
+
+To remove stopwords, first I am splitting trigrams in different columns
+
+```{r}
+trigrams_separated <- mercadona_trigrams %>%
+  separate(trigram, c("word1", "word2", "word3"), sep = " ")
+
+#trigrams_separated
+```
+
+And secondly, filtering all spanish stopwords included in each word column 
+
+```{r}
+trigrams_filtered <- trigrams_separated %>%
+  anti_join(stop_words_es, by = c("word1" = "value")) %>%
+  anti_join(stop_words_es, by = c("word2" = "value")) %>%
+  anti_join(stop_words_es, by = c("word3" = "value"))
+
+#trigrams_filtered
+```
+
+To get both words to be a single column again
+
+```{r}
+trigrams_united <- trigrams_filtered %>%
+  unite(trigram, word1, word2, word3, sep = " ")
+
+#trigrams_united
+```
+
+Count trigrams
+
+```{r}
+trigram_counts <- trigrams_united %>% 
+  count(trigram, sort = TRUE)
+
+trigram_counts
+```
+
+### Visualizing most common trigrams
+
+Wordcloud
+
+```{r}
+set.seed(234)
+graph14 <- trigram_counts %>%
+  slice_head(n = 10) %>%
+  with(wordcloud(trigram, n, scale = c(1, 2), rot.per = 0, colors = "#609E42"))
+```
+
+Barplot
+
+```{r}
+graph16 <- trigram_counts %>%
+  mutate(trigram = fct_reorder(trigram, n, .desc = FALSE)) %>%# To order them from higher to lower
+  mutate(word = reorder(trigram, -n)) %>%
+  slice_head(n= 10)%>%   # Filter only the top ten trigrams
+  ggplot(aes(n, trigram)) +
+  geom_col(fill= "#609E42") +
+  labs(y = NULL, x=NULL)+
+  ggtitle("Top 10 most trigrams")+
+  theme_minimal()+
+  theme(panel.grid.major.x  = element_line(color = "darkgrey",
+                                          size = 0.1, linetype = 2))+
+  theme(panel.grid.minor.x = element_blank())+
+  theme(panel.grid.major.y = element_blank())+
+  theme(plot.title = element_text(hjust = 0.4))
+
+graph16
+```
+```{r}
+ggsave("../plots/graph16.png", plot = graph16, width = 8, height = 8, dpi = 300)
+```
+
+# **Latent Dirichlet Allocation**
+
+ From tidytext to Document-Term Matrix (DTM)
+
+```{r}
+count_data <- lemmatized_mercadona %>%
+  group_by(year, lemmatized_word) %>%
+  tally() %>% # to count the occurrences of each word in each year
+  rename(count = n) %>%
+  ungroup()
+
+count_data 
+```
+
+```{r}
+mercadona_dtm <- count_data %>% cast_tdm(year, lemmatized_word, count)#Those are the three columns present in count_data variable
+
+mercadona_dtm
+```
+
+The Mercadona press release collection has an sparsity of 74%, indicating a relatively sparse matrix, which means that approximately 74% of the elements in my document-term matrix are zeros, and a zero value means that a particular term does not appear in a specific document. Hence, this sparsity value might be due to the fact that the vocabulary (set of unique words) is relatively large compared to the number of press releases.
+
+# LDA k=10
+
+Now I apply the LDA function specifying this time 10 topics, because there is 10 years of press releases.
+
+```{r}
+set.seed(234)
+k <- 10#Number of topics to cluster
+mercadona_lda_10 <- LDA(mercadona_dtm, k)
+
+# Get the topics and associated terms
+topics_10 <- terms(mercadona_lda_10, 5)  #5 top terms per topic
+
+print(topics_10)
+```
+
+Get the LDA object back to the tidy format (topic, term, beta) to visualize the topics
+
+```{r}
+years_topics_10 <- tidy(mercadona_lda_10)
+#years_topics_10
+```
+
+## Visualize most common words for each topic
+
+```{r}
+top_terms_10 <- years_topics_10 %>%
+  group_by(topic) %>%
+  slice_max(beta, n = 5) %>% 
+  ungroup() %>%
+  arrange(topic, -beta)
+
+graph17 <- top_terms_10 %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(beta, term, fill = factor(topic))) +
+  geom_col(fill= "#609E42", show.legend = FALSE) +
+  facet_wrap(~ topic, ncol=5, scales = "free") +
+  scale_y_reordered()+
+  labs(x = NULL, y = NULL, title = "Most common words in each of the 10 topics")+
+    theme_minimal()+
+  theme(axis.text.x= element_blank())
+
+graph17
+```
+```{r}
+ggsave("../plots/graph17.png", plot = graph17, width = 8, height = 8, dpi = 300)
+```
+
+# LDA k=6
+
+Because exploring bigrams and trigrams results, I identified six main topics.
+
+```{r}
+set.seed(234)
+k <- 6#Number of topics to cluster
+mercadona_lda_6 <- LDA(mercadona_dtm, k)
+
+# Get the topics and associated terms
+topics_6 <- terms(mercadona_lda_6, 5)  #5top terms per topic
+
+print(topics_6)
+```
+
+Get the LDA object back to the tidy format (topic, term, beta) to visualize the topic
+
+```{r}
+years_topics_6 <- tidy(mercadona_lda_6)
+#years_topics_6
+```
+
+## Visualize most common words for each topic
+
+```{r}
+
+top_terms_6 <- years_topics_6 %>%
+  group_by(topic) %>%
+  slice_max(beta, n = 5) %>% 
+  ungroup() %>%
+  arrange(topic, -beta)
+
+graph18 <- top_terms_6 %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(beta, term, fill = factor(topic))) +
+  geom_col(fill= "#609E42", show.legend = FALSE) +
+  facet_wrap(~ topic, ncol=3, scales = "free") +
+  scale_y_reordered()+
+  labs(x = NULL, y = NULL, title = "Most common words in each of the 6 topics")+
+    theme_minimal()+
+  theme(axis.text.x= element_blank())
+
+graph18
+```
+```{r}
+ggsave("../plots/graph18.png", plot = graph18, width = 8, height = 8, dpi = 300)
+```
+
+# LDA k=4
+
+```{r}
+set.seed(234)
+k <- 4#Number of topics to cluster
+mercadona_lda_4 <- LDA(mercadona_dtm, k)
+
+# Get the topics and associated terms
+topics_4 <- terms(mercadona_lda_4, 5)  #5 top terms per topic
+
+print(topics_4)
+```
+
+Get the LDA object back to the tidy format (topic, term, beta) to visualize the topic
+
+```{r}
+years_topics_4 <- tidy(mercadona_lda_4)
+#years_topics_4
+```
+
+## Visualize most common words for each topic
+
+```{r}
+top_terms_4 <- years_topics_4 %>%
+  group_by(topic) %>%
+  slice_max(beta, n = 5) %>% 
+  ungroup() %>%
+  arrange(topic, -beta)
+
+graph19 <- top_terms_4 %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(beta, term, fill = factor(topic))) +
+  geom_col(fill= "#609E42", show.legend = FALSE) +
+  facet_wrap(~ topic, ncol=2, scales = "free") +
+  scale_y_reordered()+
+  labs(x = NULL, y = NULL, title = "Most common words in each of the 4 topics")+
+    theme_minimal()+
+  theme(axis.text.x= element_blank())
+
+graph19
+```
+```{r}
+ggsave("../plots/graph19.png", plot = graph19, width = 8, height = 8, dpi = 300)
+```
+
+Independently from the number of categories selected (10, 6 and 4) the word count top ten words, like "compañía", "millón", "porcentaje" or "euros", are repeated in most of the categories at the same time. This result is probably due to the fact that those words are really frequent words in my press release data, consequently, those words do not provide discriminative information for topic detection. Therefore, I am going to remove those words to apply LDA again, in order to identify more concrete topics.
+
+Despite the fact that those words do not contribute to discriminate information for specific topic detection, they are common language used in Mercadona press releases and they could be considered part of the basic structure of Mercadona press releases.
+
+### Filtering unconvenient words
+
+```{r}
+mercadona_unconvinient <- tibble(word = c("cliente", "producto", "supermercado", "euros", "nuevo", "año", "millón", "persona", "porcentaje", "compañía",
+                                          "además",#stopword not removed earlier
+"2013", "2014", "2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022",#years are not useful for tpic modelling
+"tiendar"))#not properly cleaned word
+```
+
+Removing those specific words 
+
+```{r}
+lemmatized_mercadona<- lemmatized_mercadona%>% 
+  rename(base_word = word) %>%
+  rename( word = lemmatized_word) 
+
+mercadona_sin_unconvinient <- anti_join(lemmatized_mercadona, mercadona_unconvinient, 
+                           by = "word")
+```
+
+From tidytext to DTM
+
+```{r}
+count_data2 <- mercadona_sin_unconvinient %>%
+  group_by(year, word) %>%
+  tally() %>% # to count the occurrences of each word in each year
+  rename(count = n) %>%
+  ungroup()
+
+mercadona_dtm2 <- count_data2 %>% cast_tdm(year, word, count)
+```
+
+# LDA removed words k=6
+
+```{r}
+set.seed(234)
+k <- 6
+mercadona_lda2_6 <- LDA(mercadona_dtm2, k)
+
+# Get the topics and associated terms
+topics2_6 <- terms(mercadona_lda2_6, 5)  #5 top terms per topic
+
+# Print the topics
+print(topics2_6)
+```
+Get the LDA object back to the tidy format (topic, term, beta) to visualize the topic
+
+```{r}
+years_topics2_6 <- tidy(mercadona_lda2_6)
+#years_topics_4
+```
+
+## Visualize most common words for each topic
+
+```{r}
+top_terms2_6 <- years_topics2_6%>%
+  group_by(topic) %>%
+  slice_max(beta, n = 5) %>% 
+  ungroup() %>%
+  arrange(topic, -beta)
+
+graph20 <- top_terms2_6 %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(beta, term, fill = factor(topic))) +
+  geom_col(fill= "#609E42", show.legend = FALSE) +
+  facet_wrap(~ topic, ncol=2, scales = "free") +
+  scale_y_reordered()+
+  labs(x = NULL, y = NULL, title = "Most common words in each of the 6 topics")+
+    theme_minimal()+
+  theme(axis.text.x= element_blank())
+
+graph20
+```
+```{r}
+ggsave("../plots/graph20.png", plot = graph20, width = 8, height = 8, dpi = 300)
+```
+
+# LDA removed words k=4
+
+```{r}
+set.seed(234)
+k <- 4
+mercadona_lda2_4 <- LDA(mercadona_dtm2, k)
+
+# Get the topics and associated terms
+topics2_4 <- terms(mercadona_lda2_4, 5)  #5 top terms per topic
+
+# Print the topics
+print(topics2_4)
+```
+Get the LDA object back to the tidy format (topic, term, beta) to visualize the topic
+
+```{r}
+years_topics2_4 <- tidy(mercadona_lda2_4)
+#years_topics_4
+```
+
+## Visualize most common words for each topic
+
+```{r}
+top_terms2_4 <- years_topics2_4%>%
+  group_by(topic) %>%
+  slice_max(beta, n = 5) %>% 
+  ungroup() %>%
+  arrange(topic, -beta)
+
+graph21 <- top_terms2_4 %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(beta, term, fill = factor(topic))) +
+  geom_col(fill= "#609E42", show.legend = FALSE) +
+  facet_wrap(~ topic, ncol=2, scales = "free") +
+  scale_y_reordered()+
+  labs(x = NULL, y = NULL, title = "Most common words in each of the 4 topics")+
+    theme_minimal()+
+  theme(axis.text.x= element_blank())
+
+graph21
+```
+```{r}
+ggsave("../plots/graph21.png", plot = graph21, width = 8, height = 8, dpi = 300)
+```
+
+Again, independently the number of categories selected there is five words that are repeated in most of the categories at the same time, logísitico, empresa, online, tienda y modelo. Probably this words are not specific or distinct enough to identify specific topics, because they are generic or common in the press release and also shape Mercadona press release basic structure. 
+
+Hence, I am also removing these words to focus on identifying more unique and informative terms.
+
+### Filtering more unconvenient words
+
+```{r}
+mercadona_unconvinient_more <- tibble(word = c("cliente", "producto", "supermercado", "euros", "nuevo", "año", "millón", "persona", "porcentaje", "compañía",
+                                          "además",#stopword not removed earlier
+"2013", "2014", "2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022",#years are not useful for tpic modelling
+"tiendar",#not properly cleaned word
+"logístico", "empresa", "online", "tienda", "modelo", "trabajador"))
+```
+
+Removing those specific words 
+
+```{r}
+mercadona_sin_unconvinient_more <- anti_join(lemmatized_mercadona, mercadona_unconvinient_more, 
+                           by = "word")
+```
+
+From tidytext to DTM
+
+```{r}
+count_data3 <- mercadona_sin_unconvinient_more %>%
+  group_by(year, word) %>%
+  tally() %>% # to count the occurrences of each word in each year
+  rename(count = n) %>%
+  ungroup()
+
+mercadona_dtm3 <- count_data3 %>% cast_tdm(year, word, count)
+```
+
+# LDA removed words k=2
+
+```{r}
+k <- 2
+set.seed(234)
+mercadona_lda3_2 <- LDA(mercadona_dtm3, k)
+
+# Get the topics and associated terms
+topics3_2 <- terms(mercadona_lda3_2, 5)  #5 top terms per topic
+
+# Print the topics
+print(topics3_2)
+```
+Get the LDA object back to the tidy format (topic, term, beta) to visualize the topic
+
+```{r}
+years_topics3_2 <- tidy(mercadona_lda3_2)
+#years_topics_4
+```
+
+## Visualize most common words for each topic
+
+```{r}
+top_terms3_2 <- years_topics3_2%>%
+  group_by(topic) %>%
+  slice_max(beta, n = 5) %>% 
+  ungroup() %>%
+  arrange(topic, -beta)
+
+graph22 <- top_terms3_2 %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(beta, term, fill = factor(topic))) +
+  geom_col(fill= "#609E42", show.legend = FALSE) +
+  facet_wrap(~ topic, ncol=2, scales = "free") +
+  scale_y_reordered()+
+  labs(x = NULL, y = NULL, title = "Most common words in each of the 2 topics")+
+    theme_minimal()+
+  theme(axis.text.x= element_blank())
+
+graph22
+```
+```{r}
+ggsave("../plots/graph22.png", plot = graph22, width = 8, height = 8, dpi = 300)
+```
+
+After applying LDA to conclusions can be extracted:
+
+1. The words I had to remove during the process are common language used in Mercadona press releases, hence, they are the basic structure of Mercadona press releases. And on top of that, these words can be used by any press releases professional as a guideline to know about what to write, despite "modelo", "logísitico", "online", "supermercado", "tienda" and "producto" , because those words are specific to Mercadona business model. Therefore, when using the words displayed in the wordcloud as an schema to create press releases, those specific word should be change to the company specific business model characteristics. 
+
+```{r}
+mercadona_structure <- c("cliente", "producto", "supermercado", "euros", "nuevo", "año", "millón", "persona", "porcentaje", "compañía", "logístico", "empresa", "online", "tienda", "modelo", "trabajador")
+
+#Get frequency for wordcloud
+word_freq <- table(mercadona_structure)
+
+set.seed(234)
+graph23 <- wordcloud(words = names(word_freq),
+          freq = as.numeric(word_freq), scale=c(2, 3), colors = "#609E42")
+
+graph23
+```
+```{r}
+#ggsave("../plots/graph23.png", plot = graph23, width = 8, height = 8, dpi = 300)
+```
+
+
+2. After removing all common words and trying different parameters, LDA algorithm allows me to conclude that there is two main topics in Mercadona press releases. The first topic refers to the company itself, their activities and characteristics, and the second topic refers to their Corporate Social Responsability, referring their sustainable and social compromise.
