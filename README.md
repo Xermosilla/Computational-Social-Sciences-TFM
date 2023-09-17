@@ -25,4 +25,4 @@ The full R code named "tfm_code", is divided in four main blocks:
 
 - **Text mining techniques** In chunk 24 I have performed lemmatization in Pyhton, therefore to replicate that part of the code you need to run the code line that saves data, then move to the Pyhton code and run it, and finally go back to the R code and open the lemmatized dataset.
 
--**Latent Dirichlet Allocation**  probabilistic model used to uncover hidden topics within a collection of documents. Using it was an iterative process to fine-tune the model and extract meaningful insights.
+- **Latent Dirichlet Allocation** Probabilistic model used to uncover hidden topics within a collection of documents. Using it was an iterative process to fine-tune the model and extract meaningful insights.
